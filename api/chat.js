@@ -1,23 +1,38 @@
-import OpenAI from 'openai';
+const express = require('express');
+const router = express.Router();
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+// Chat history (note: this won't persist between function calls on Vercel)
+let chatHistory = [];
+
+router.post('/', async (req, res) => {
+  try {
+    const { message } = req.body;
+    const openai = req.app.get('openai');
+    
+    // Add user message to chat history
+    chatHistory.push({ role: 'user', content: message });
+
+    // Prepare the messages for OpenAI API
+    const messages = [
+      { role: 'system', content: 'You are a helpful assistant for XCEL MIND, providing advice on small business, finance, and AI-based gig work.' },
+      ...chatHistory
+    ];
+
+    const response = await openai.createChatCompletion({
+      model: "gpt-3.5-turbo",
+      messages: messages,
+    });
+
+    const assistantMessage = response.data.choices[0].message.content;
+
+    // Add assistant's response to chat history
+    chatHistory.push({ role: 'assistant', content: assistantMessage });
+
+    res.json({ message: assistantMessage, history: chatHistory });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'An error occurred while processing your request.' });
+  }
 });
 
-export default async function handler(req, res) {
-  if (req.method === 'POST') {
-    try {
-      const { userMessage } = req.body;
-      const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content: userMessage }],
-      });
-      res.status(200).json({ reply: response.choices[0].message.content });
-    } catch (error) {
-      console.error('OpenAI API error:', error);
-      res.status(500).json({ error: 'An error occurred while processing your request.' });
-    }
-  } else {
-    res.status(405).json({ error: 'Method not allowed' });
-  }
-}
+module.exports = router;
